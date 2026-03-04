@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+
 
 echo "══════════════════════════════════════════════════"
 echo "🇫🇷 Bienici Service Starting"
@@ -58,9 +58,9 @@ echo ""
 echo "🔄 Running initial jobs on startup..."
 
 # Run all 3 jobs on startup (in sequence: scrape → clean → sync)
-/app/runner.sh scraper
-/app/runner.sh cleaner
-/app/runner.sh sync
+/app/runner.sh scraper || echo "⚠️  Scraper startup failed — will retry via cron"
+/app/runner.sh cleaner || echo "⚠️  Cleaner startup failed — will retry via cron"
+/app/runner.sh sync || echo "⚠️  Sync startup failed — will retry via cron"
 
 echo "══════════════════════════════════════════════════"
 echo "✅ Startup complete — cron daemon starting"
