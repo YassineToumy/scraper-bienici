@@ -19,6 +19,7 @@ import argparse
 from pymongo import MongoClient, ASCENDING
 from pymongo.errors import BulkWriteError
 from dotenv import load_dotenv
+from storage import upload_images
 from datetime import datetime, timezone
 
 load_dotenv()
@@ -71,7 +72,7 @@ def clean_description(raw: str) -> str | None:
     return text if len(text) > 20 else None
 
 
-def extract_photo_urls(photos: list) -> list[str]:
+def extract_photo_urls(photos: list, source_id: str = "") -> list[str]:
     if not photos or not isinstance(photos, list):
         return []
     seen = set()
@@ -85,7 +86,7 @@ def extract_photo_urls(photos: list) -> list[str]:
         if url and url not in seen:
             seen.add(url)
             urls.append(url)
-    return urls
+    return upload_images("bienici", source_id, urls)
 
 
 def extract_coordinates(doc: dict) -> tuple[float | None, float | None]:
@@ -212,7 +213,7 @@ def clean_document(doc: dict) -> dict:
 
     c["description"] = clean_description(doc.get("description"))
 
-    photo_urls = extract_photo_urls(doc.get("photos"))
+    photo_urls = extract_photo_urls(doc.get("photos"), source_id)
     c["photos"] = photo_urls if photo_urls else []
     c["photos_count"] = len(photo_urls)
 
