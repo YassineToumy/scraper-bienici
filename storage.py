@@ -5,6 +5,7 @@ Falls back to original URL if B2 is not configured or upload fails.
 """
 
 import os
+import time
 import hashlib
 import logging
 import requests
@@ -76,7 +77,7 @@ def upload_image(source, ad_id, img_url, index=0, timeout=20):
         except ClientError:
             pass
 
-        # Download with proper Referer to bypass hotlink protection
+        # Download with retry on 503/timeout
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                           "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
@@ -84,10 +85,20 @@ def upload_image(source, ad_id, img_url, index=0, timeout=20):
             "Accept-Language": "en-US,en;q=0.9",
             "Referer": REFERERS.get(source, ""),
         }
-        resp = requests.get(img_url, timeout=timeout, stream=True, headers=headers)
-        resp.raise_for_status()
-        content_type = resp.headers.get("Content-Type", "image/jpeg").split(";")[0]
-        data = resp.content
+        data = None
+        content_type = "image/jpeg"
+        for attempt in range(3):
+            try:
+                resp = requests.get(img_url, timeout=timeout, stream=True, headers=headers)
+                resp.raise_for_status()
+                content_type = resp.headers.get("Content-Type", "image/jpeg").split(";")[0]
+                data = resp.content
+                break
+            except Exception as e:
+                if attempt < 2:
+                    time.sleep(3 * (attempt + 1))
+                else:
+                    raise
 
         if not data:
             return img_url
