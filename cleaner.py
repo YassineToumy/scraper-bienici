@@ -28,7 +28,7 @@ load_dotenv()
 # CONFIG
 # ============================================================
 
-MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://root:root@localhost:27017")
+MONGODB_URI = os.getenv("MONGODB_URI")
 MONGODB_DATABASE = os.getenv("MONGO_BIENICI_DB", "bienici")
 SOURCE_COLLECTION = os.getenv("MONGO_BIENICI_COL_RAW", "locations")
 CLEAN_COLLECTION = os.getenv("MONGO_BIENICI_COL_CLEAN", "locations_clean")
@@ -192,10 +192,8 @@ def clean_document(doc: dict) -> dict:
     c["price"] = doc.get("price")
     c["currency"] = "EUR"
     c["charges"] = doc.get("charges")
-    # agency_fee: try multiple field names used across bienici API versions
-    c["agency_fee"] = (doc.get("agencyRentalFee")
-                       or doc.get("agencyFeeUrl")
-                       or doc.get("feePercentage"))
+    # agency_fee: numeric only — agencyFeeUrl is a URL string, skip it
+    c["agency_fee"] = doc.get("agencyRentalFee") or doc.get("feePercentage")
     c["price_decreased"] = doc.get("priceHasDecreased")
 
     c["energy_class"] = doc.get("energyClassification")
