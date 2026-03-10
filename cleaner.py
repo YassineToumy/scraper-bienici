@@ -192,8 +192,9 @@ def clean_document(doc: dict) -> dict:
     c["price"] = doc.get("price")
     c["currency"] = "EUR"
     c["charges"] = doc.get("charges")
-    # agency_fee: numeric only — agencyFeeUrl is a URL string, skip it
-    c["agency_fee"] = doc.get("agencyRentalFee") or doc.get("feePercentage")
+    # agency_fee: numeric only — agencyFeeUrl / agencyRentalFee can be a URL string, skip it
+    raw_fee = doc.get("agencyRentalFee") or doc.get("feePercentage")
+    c["agency_fee"] = raw_fee if isinstance(raw_fee, (int, float)) else None
     c["price_decreased"] = doc.get("priceHasDecreased")
 
     c["energy_class"] = doc.get("energyClassification")
@@ -381,37 +382,41 @@ def run(source, clean, dry_run=False):
     }
 
     batch = []
-    for i, doc in enumerate(source.find(query, batch_size=BATCH_SIZE)):
-        try:
-            cleaned = clean_document(doc)
-            stats["cleaned"] += 1
+    cursor = source.find(query, batch_size=BATCH_SIZE, no_cursor_timeout=True)
+    try:
+        for i, doc in enumerate(cursor):
+            try:
+                cleaned = clean_document(doc)
+                stats["cleaned"] += 1
 
-            valid, reason = validate(cleaned)
-            if not valid:
-                stats[reason] = stats.get(reason, 0) + 1
-                continue
+                valid, reason = validate(cleaned)
+                if not valid:
+                    stats[reason] = stats.get(reason, 0) + 1
+                    continue
 
-            cleaned.pop("_id", None)
+                cleaned.pop("_id", None)
 
-            if dry_run:
-                stats["inserted"] += 1
-                continue
+                if dry_run:
+                    stats["inserted"] += 1
+                    continue
 
-            batch.append(cleaned)
+                batch.append(cleaned)
 
-            if len(batch) >= BATCH_SIZE:
-                ins, dup = insert_batch(clean, batch)
-                stats["inserted"] += ins
-                stats["duplicates"] += dup
-                batch = []
-                pct = (i + 1) / pending * 100
-                print(f"   ⏳ {i+1}/{pending} ({pct:.1f}%) — ✅ {stats['inserted']}",
-                      end="\r", flush=True)
+                if len(batch) >= BATCH_SIZE:
+                    ins, dup = insert_batch(clean, batch)
+                    stats["inserted"] += ins
+                    stats["duplicates"] += dup
+                    batch = []
+                    pct = (i + 1) / pending * 100
+                    print(f"   ⏳ {i+1}/{pending} ({pct:.1f}%) — ✅ {stats['inserted']}",
+                          end="\r", flush=True)
 
-        except Exception as e:
-            stats["errors"] += 1
-            if stats["errors"] <= 5:
-                print(f"\n   ⚠️  Error on {doc.get('id')}: {str(e)[:100]}")
+            except Exception as e:
+                stats["errors"] += 1
+                if stats["errors"] <= 5:
+                    print(f"\n   ⚠️  Error on {doc.get('id')}: {str(e)[:100]}")
+    finally:
+        cursor.close()
 
     if batch and not dry_run:
         ins, dup = insert_batch(clean, batch)
