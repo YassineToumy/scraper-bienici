@@ -14,23 +14,15 @@ cat > /etc/cron.d/bienici <<'CRON'
 SHELL=/bin/bash
 PATH=/usr/local/bin:/usr/bin:/bin
 
-# Scraper — every 24h at 02:00 UTC (incremental after first run)
+# Scraper — every 24h at 02:00 UTC; cleaner + sync chain automatically after
 0 2 * * * root /app/runner.sh scraper >> /app/logs/cron.log 2>&1
-
-# Cleaner — every 24h at 06:00 UTC (after scraper)
-0 6 * * * root /app/runner.sh cleaner >> /app/logs/cron.log 2>&1
-
-# Sync to PostgreSQL — every 24h at 10:00 UTC (after cleaner)
-0 10 * * * root /app/runner.sh sync >> /app/logs/cron.log 2>&1
 
 CRON
 
 chmod 0644 /etc/cron.d/bienici
 
 echo "✅ Cron schedule installed:"
-echo "   02:00  🕷️  Scraper (daily)"
-echo "   06:00  🧹 Cleaner (daily)"
-echo "   10:00  🔄 Sync to PostgreSQL (daily)"
+echo "   02:00  🕷️  Scraper → 🧹 Cleaner → 🔄 Sync (chained, daily)"
 echo ""
 
 # Verify connections
@@ -55,12 +47,10 @@ conn.close()
 " || echo "  ❌ PostgreSQL connection failed"
 
 echo ""
-echo "🔄 Running initial jobs on startup..."
+echo "🔄 Running initial pipeline on startup (scraper → cleaner → sync)..."
 
-# Run all 3 jobs on startup (in sequence: scrape → clean → sync)
-/app/runner.sh scraper || echo "⚠️  Scraper startup failed — will retry via cron"
-/app/runner.sh cleaner || echo "⚠️  Cleaner startup failed — will retry via cron"
-/app/runner.sh sync || echo "⚠️  Sync startup failed — will retry via cron"
+# scraper chains cleaner, cleaner chains sync — one call runs all three
+/app/runner.sh scraper || echo "⚠️  Pipeline startup failed — will retry via cron"
 
 echo "══════════════════════════════════════════════════"
 echo "✅ Startup complete — cron daemon starting"

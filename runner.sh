@@ -19,6 +19,8 @@ if [ -f "$PIDFILE" ] && kill -0 "$(cat $PIDFILE)" 2>/dev/null; then
     exit 0
 fi
 
+echo $$ > "$PIDFILE"
+
 cd /app
 
 case "$JOB" in
@@ -33,6 +35,7 @@ case "$JOB" in
         ;;
     *)
         echo "❌ Unknown job: ${JOB}. Use: scraper | cleaner | sync"
+        rm -f "$PIDFILE"
         exit 1
         ;;
 esac
@@ -48,5 +51,18 @@ fi
 
 # Rotate logs older than 30 days
 find /app/logs -name "${JOB}_*.log" -mtime +30 -delete 2>/dev/null || true
+
+# Chain: scraper → cleaner → sync (no artificial delay between steps)
+if [ "$JOB" = "scraper" ]; then
+    echo ""
+    echo "🧹 Scraper finished — triggering cleaner..."
+    /app/runner.sh cleaner
+fi
+
+if [ "$JOB" = "cleaner" ]; then
+    echo ""
+    echo "🔄 Cleaner finished — triggering sync..."
+    /app/runner.sh sync
+fi
 
 exit $EXIT_CODE
