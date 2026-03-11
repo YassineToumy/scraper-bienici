@@ -94,6 +94,15 @@ def upload_image(source, ad_id, img_url, index=0, timeout=20):
                 content_type = resp.headers.get("Content-Type", "image/jpeg").split(";")[0]
                 data = resp.content
                 break
+            except requests.HTTPError as e:
+                # 4xx = image is gone — no point retrying
+                if e.response is not None and 400 <= e.response.status_code < 500:
+                    log.debug(f"Image gone ({e.response.status_code}), skipping: {img_url[:80]}")
+                    return None
+                if attempt < 2:
+                    time.sleep(3 * (attempt + 1))
+                else:
+                    raise
             except Exception as e:
                 if attempt < 2:
                     time.sleep(3 * (attempt + 1))
@@ -101,7 +110,7 @@ def upload_image(source, ad_id, img_url, index=0, timeout=20):
                     raise
 
         if not data:
-            return img_url
+            return None
 
         s3.put_object(Bucket=B2_BUCKET, Key=key, Body=data, ContentType=content_type)
         return _public_url(key)
@@ -112,11 +121,12 @@ def upload_image(source, ad_id, img_url, index=0, timeout=20):
 
 
 def upload_images(source, ad_id, img_urls, timeout=20):
-    """Upload multiple images. Returns list of B2 URLs (fallback to original on failure)."""
+    """Upload multiple images. Returns list of B2 URLs (skips images that are gone)."""
     if not img_urls:
         return []
-    return [
+    results = [
         upload_image(source, ad_id, url, index=i, timeout=timeout)
         for i, url in enumerate(img_urls)
         if url
     ]
+    return [r for r in results if r]
