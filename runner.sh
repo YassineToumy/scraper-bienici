@@ -30,11 +30,8 @@ case "$JOB" in
     cleaner)
         python -u cleaner.py 2>&1 | tee "$LOGFILE"
         ;;
-    sync)
-        python -u sync.py 2>&1 | tee "$LOGFILE"
-        ;;
     *)
-        echo "❌ Unknown job: ${JOB}. Use: scraper | cleaner | sync"
+        echo "❌ Unknown job: ${JOB}. Use: scraper | cleaner"
         rm -f "$PIDFILE"
         exit 1
         ;;
@@ -52,17 +49,11 @@ fi
 # Rotate logs older than 30 days
 find /app/logs -name "${JOB}_*.log" -mtime +30 -delete 2>/dev/null || true
 
-# Chain: scraper → cleaner → sync (no artificial delay between steps)
+# Chain: scraper → cleaner (no artificial delay between steps)
 if [ "$JOB" = "scraper" ]; then
     echo ""
     echo "🧹 Scraper finished — triggering cleaner..."
     /app/runner.sh cleaner
-fi
-
-if [ "$JOB" = "cleaner" ]; then
-    echo ""
-    echo "🔄 Cleaner finished — triggering sync..."
-    /app/runner.sh sync
 fi
 
 exit $EXIT_CODE

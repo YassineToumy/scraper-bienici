@@ -8,9 +8,6 @@ services:
       - MONGO_BIENICI_DB=${MONGO_BIENICI_DB:-bienici}
       - MONGO_BIENICI_COL_RAW=${MONGO_BIENICI_COL_RAW:-locations}
       - MONGO_BIENICI_COL_CLEAN=${MONGO_BIENICI_COL_CLEAN:-locations_clean}
-      - POSTGRES_DSN=${POSTGRES_DSN}
-      - PG_TABLE_BIENICI=${PG_TABLE_BIENICI:-bienici_listings}
-      - PG_ARCHIVE_BIENICI=${PG_ARCHIVE_BIENICI:-bienici_archive}
       - BATCH_SIZE=${BATCH_SIZE:-500}
       - CYCLE_SLEEP=${CYCLE_SLEEP:-86400}
       - B2_KEY_ID=${B2_KEY_ID}
