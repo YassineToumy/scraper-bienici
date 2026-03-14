@@ -352,7 +352,7 @@ def run(source, clean, dry_run=False):
     total = source.count_documents({})
     print(f"📊 Source total: {total} docs")
 
-    # Load already-cleaned source_ids to skip them
+    # Load already-cleaned source_ids into memory
     if not dry_run and clean is not None:
         print("🔍 Loading already-cleaned IDs...")
         existing_ids = {d["source_id"] for d in clean.find({}, {"source_id": 1, "_id": 0})}
@@ -360,14 +360,7 @@ def run(source, clean, dry_run=False):
     else:
         existing_ids = set()
 
-    # Count pending
-    if existing_ids:
-        pending = source.count_documents({"id": {"$nin": list(existing_ids)}})
-        query = {"id": {"$nin": list(existing_ids)}}
-    else:
-        pending = total
-        query = {}
-
+    pending = total - len(existing_ids)
     print(f"   ⏳ Pending (not yet cleaned): {pending}\n")
 
     if pending == 0:
@@ -382,9 +375,22 @@ def run(source, clean, dry_run=False):
     }
 
     batch = []
-    cursor = source.find(query, batch_size=BATCH_SIZE, no_cursor_timeout=True)
-    try:
-        for i, doc in enumerate(cursor):
+    last_id = None
+    processed = 0
+
+    # Paginate by _id — each batch is a short fresh query, no long-running cursor
+    while True:
+        page_query = {"_id": {"$gt": last_id}} if last_id else {}
+        docs = list(source.find(page_query).sort("_id", 1).limit(BATCH_SIZE))
+        if not docs:
+            break
+        last_id = docs[-1]["_id"]
+
+        for doc in docs:
+            # Skip already-cleaned docs (checked in Python, no $nin query)
+            if doc.get("id") in existing_ids:
+                continue
+
             try:
                 cleaned = clean_document(doc)
                 stats["cleaned"] += 1
@@ -407,16 +413,15 @@ def run(source, clean, dry_run=False):
                     stats["inserted"] += ins
                     stats["duplicates"] += dup
                     batch = []
-                    pct = (i + 1) / pending * 100
-                    print(f"   ⏳ {i+1}/{pending} ({pct:.1f}%) — ✅ {stats['inserted']}",
+                    processed += BATCH_SIZE
+                    pct = min(processed / max(pending, 1) * 100, 100)
+                    print(f"   ⏳ ~{processed}/{pending} ({pct:.1f}%) — ✅ {stats['inserted']}",
                           end="\r", flush=True)
 
             except Exception as e:
                 stats["errors"] += 1
                 if stats["errors"] <= 5:
                     print(f"\n   ⚠️  Error on {doc.get('id')}: {str(e)[:100]}")
-    finally:
-        cursor.close()
 
     if batch and not dry_run:
         ins, dup = insert_batch(clean, batch)
