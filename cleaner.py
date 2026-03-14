@@ -15,6 +15,7 @@ Usage:
 import os
 import re
 import html
+import unicodedata
 import argparse
 from pymongo import MongoClient, ASCENDING
 from pymongo.errors import BulkWriteError
@@ -60,12 +61,14 @@ ENERGY_MAP = {"A": 1, "B": 2, "C": 3, "D": 4, "E": 5, "F": 6, "G": 7}
 
 
 def clean_description(raw: str) -> str | None:
-    """Strip HTML tags, HTML entities, agency boilerplate, normalize whitespace."""
+    """Strip HTML, decode entities, normalize accents, remove boilerplate."""
     if not raw:
         return None
-    text = RE_HTML.sub("", raw)       # Remove HTML tags: <b>, <br/>, <p>, etc.
-    text = html.unescape(text)        # Decode HTML entities: &amp; &nbsp; &lt; etc.
+    text = RE_HTML.sub(" ", raw)
+    text = html.unescape(text)
     text = RE_BOILERPLATE.sub("", text)
+    # Normalize accented chars: é→e, à→a, ç→c, etc.
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     text = text.strip()
